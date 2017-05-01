@@ -19,7 +19,29 @@
 
 #include "tasks.hpp"
 #include "examples/examples.hpp"
+#include <stdio.h>
+#include "sys_config.h"
+#include "io.hpp"
+#include "storage.hpp"
+#include "event_groups.h"
+#include "LPC17xx.h"
+#include "gpio.hpp"
+#include "utilities.h"
+#include "printf_lib.h"
+#include <string.h> // include the use of strings
+#include "i2c2.hpp"
+#include "i2c_base.hpp"
+#include "_ansi.h"
+#include <sys/reent.h>
+#include <machine/time.h>// from time file
+#include <stdint.h>
+#include <stdio.h>
 
+// Library for IR sensors
+#include "adc0.h"
+
+// Library for PWMS
+#include "lpc_pwm.hpp"
 
 
 //-------------------------------------------------------------Pixy Camera Code-------------------------------
@@ -199,7 +221,7 @@ public:
 	{
 		int adc3 = adc0_get_reading(3); // Read the value of ADC-3
 		printf("The adc integer is: %i \n", adc3);
-		if(1500 < adc3 < 1900) printf("There is an object in its way! \n");
+		//if(1500 < adc3 < 1900) printf("There is an object in its way! \n");
 		vTaskDelay(3000);
 		// int adc4 = adc0_get_reading(4); // Read the value of ADC-4
 		// int adc5 = adc0_get_reading(5); // Read the value of ADC-5
@@ -247,89 +269,194 @@ void servo_control()
 	servo2.set(10.0); ///< Set to right position
 }
 
-class PWM_Motor:public scheduler_task
+//class PWM_Motor:public scheduler_task
+//{
+//public:
+//	PWM_Motor(uint8_t priority):scheduler_task("PWM_Motor", 2000, priority)
+//{
+//
+//}
+//	bool run(void *p)
+//	{
+//		/* Use 1Khz PWM.  Each PWM shares the 1st frequency you set */
+//		PWM motor1(PWM::pwm1, 1000);
+//		PWM motor2(PWM::pwm2, 0);
+//		/* Set to 50% motor speed */
+//		printf("Setting motor speed! \n");
+//		motor1.set(50);
+//		motor2.set(50);
+//		vTaskDelay(3000);
+//		motor1.set(0);
+//		motor2.set(0);
+//		return true;
+//	}
+//	bool init(void)
+//	{
+//
+//		return true;
+//	}
+//};
+
+// PWM Turning functions, only including back motors for now
+
+PWM motor1(PWM::pwm2, 1000);
+PWM motor2(PWM::pwm2, 1000);
+
+void motor_straight(void)
 {
-public:
-	PWM_Motor(uint8_t priority):scheduler_task("PWM_Motor", 2000, priority)
-{
-
-}
-	bool run(void *p)
-	{
-		/* Use 1Khz PWM.  Each PWM shares the 1st frequency you set */
-		PWM motor1(PWM::pwm1, 1000);
-		PWM motor2(PWM::pwm2, 0);
-		/* Set to 50% motor speed */
-		printf("Setting motor speed! \n");
-		motor1.set(50);
-		motor2.set(50);
-		vTaskDelay(3000);
-		motor1.set(0);
-		motor2.set(0);
-		return true;
-	}
-	bool init(void)
-	{
-
-		return true;
-	}
-};
-
-
-void pwm_testcode(){
-
-
-	printf("Init motor and GPIO\n");
-	int n = 0;
-	PWM motor1(PWM::pwm1, 200);
-	PWM motor2(PWM::pwm2, 1000);
 	motor1.set(65);
 	motor2.set(65);
-	LPC_GPIO0->FIODIR |= (1 << 0);
-	LPC_GPIO0->FIODIR |= (1 << 1);
-	LPC_GPIO0->FIODIR |= (1 << 29);
-	LPC_GPIO0->FIODIR |= (1 << 30);
-	while(1)
-	{
-		n = n + 5;
-		// First Motor Direction Set
-		// Left Motor
-		LPC_GPIO0->FIOSET = (1 << 1);
-		LPC_GPIO0->FIOCLR = (1 << 0);
-		// Right Motor
-		LPC_GPIO0->FIOSET = (1 << 30);
-		LPC_GPIO0->FIOCLR = (1 << 29);
-
-		delay_ms(10000);
-
-		// Second Motor Direction Set
-		// Left Motor
-		LPC_GPIO0->FIOSET = (1 << 0);
-		LPC_GPIO0->FIOCLR = (1 << 1);
-		// Right Motor SEt
-		LPC_GPIO0->FIOSET = (1 << 29);
-		LPC_GPIO0->FIOCLR = (1 << 30);
-		delay_ms(10000);
-
-		//motor1.set(10);
-		//motor2.set(n);
-		//motor1.set(n);
-		//printf("Current Motor Speed %i\n\n", n);
-
-	}
-	//scheduler_add_task(new PWM_Motor(PRIORITY_HIGH)); // PWM_Motors
-	//scheduler_add_task(new IR_sensor(PRIORITY_HIGH)); // IR Sensors
-
+	// Left Motor
+	LPC_GPIO0->FIOSET = (1 << 0);
+	LPC_GPIO0->FIOCLR = (1 << 1);
+	// Right Motor
+	LPC_GPIO0->FIOSET = (1 << 30);
+	LPC_GPIO0->FIOCLR = (1 << 29);
+	delay_ms(1000);
+	// Set to basic straight or wait here
 }
+void motor_slight_left(void)
+{
+	motor1.set(40);
+	motor2.set(80);
+	// Left Motor
+	LPC_GPIO0->FIOSET = (1 << 1);
+	LPC_GPIO0->FIOCLR = (1 << 0);
+	// Right Motor
+	LPC_GPIO0->FIOSET = (1 << 30);
+	LPC_GPIO0->FIOCLR = (1 << 29);
+	delay_ms(1000);
+	// Set to basic straight or wait here
+}
+void motor_hard_left(void)
+{
+	motor1.set(10);
+	motor2.set(100);
+	// Left Motor
+	LPC_GPIO0->FIOSET = (1 << 1);
+	LPC_GPIO0->FIOCLR = (1 << 0);
+	// Right Motor
+	LPC_GPIO0->FIOSET = (1 << 30);
+	LPC_GPIO0->FIOCLR = (1 << 29);
+	delay_ms(1000);
+	// Set to basic straight or wait here
+}
+void motor_slight_right(void)
+{
+	motor1.set(80);
+	motor2.set(40);
+	// Left Motor
+	LPC_GPIO0->FIOSET = (1 << 1);
+	LPC_GPIO0->FIOCLR = (1 << 0);
+	// Right Motor
+	LPC_GPIO0->FIOSET = (1 << 30);
+	LPC_GPIO0->FIOCLR = (1 << 29);
+	delay_ms(1000);
+	// Set to basic straight or wait here
+}
+void motor_hard_right(void)
+{
+	motor1.set(100);
+	motor2.set(10);
+	// Left Motor
+	LPC_GPIO0->FIOSET = (1 << 1);
+	LPC_GPIO0->FIOCLR = (1 << 0);
+	// Right Motor
+	LPC_GPIO0->FIOSET = (1 << 30);
+	LPC_GPIO0->FIOCLR = (1 << 29);
+	delay_ms(1000);
+	// Set to basic straight or wait here
+}
+
+//void pwm_testcode(){
+//
+//
+//	printf("Init motor and GPIO\n");
+//	int n = 0;
+//	PWM motor1(PWM::pwm1, 200);
+//	PWM motor2(PWM::pwm2, 1000);
+//	motor1.set(65);
+//	motor2.set(65);
+//	LPC_GPIO0->FIODIR |= (1 << 0);
+//	LPC_GPIO0->FIODIR |= (1 << 1);
+//	LPC_GPIO0->FIODIR |= (1 << 29);
+//	LPC_GPIO0->FIODIR |= (1 << 30);
+//	while(1)
+//	{
+//		n = n + 5;
+//		// First Motor Direction Set
+//		// Left Motor
+//		LPC_GPIO0->FIOSET = (1 << 1);
+//		LPC_GPIO0->FIOCLR = (1 << 0);
+//		// Right Motor
+//		LPC_GPIO0->FIOSET = (1 << 30);
+//		LPC_GPIO0->FIOCLR = (1 << 29);
+//
+//		delay_ms(10000);
+//
+//		// Second Motor Direction Set
+//		// Left Motor
+//		LPC_GPIO0->FIOSET = (1 << 0);
+//		LPC_GPIO0->FIOCLR = (1 << 1);
+//		// Right Motor SEt
+//		LPC_GPIO0->FIOSET = (1 << 29);
+//		LPC_GPIO0->FIOCLR = (1 << 30);
+//		delay_ms(10000);
+//
+//		//motor1.set(10);
+//		//motor2.set(n);
+//		//motor1.set(n);
+//		//printf("Current Motor Speed %i\n\n", n);
+//
+//	}
+
+//
+//}
+
+
+// MAIN PWM TEST CODE
+
+//	LPC_GPIO0->FIODIR |= (1 << 0);
+//	LPC_GPIO0->FIODIR |= (1 << 1);
+//	LPC_GPIO0->FIODIR |= (1 << 29);
+//	LPC_GPIO0->FIODIR |= (1 << 30);
+//	motor1.set(65);
+//	motor2.set(65);
+//	LPC_GPIO0->FIODIR |= (1 << 0);
+//	LPC_GPIO0->FIODIR |= (1 << 1);
+//	LPC_GPIO0->FIODIR |= (1 << 29);
+//	LPC_GPIO0->FIODIR |= (1 << 30);
+//	delay_ms(3000);
+
+//	motor_straight();
+//	delay_ms(3000);
+
+	//motor_hard_left();
+	//	delay_ms(3000);
+	//
+	//	motor_hard_right();
+	//	delay_ms(3000);
+	//
+	//	motor_slight_left();
+	//	delay_ms(3000);
+	//
+	//	motor_slight_right();
+	//	delay_ms(3000);
+
+
+
+
+
 
 
 
 int main(void)
 {
 
-
-
-
+	//scheduler_add_task(new PWM_Motor(PRIORITY_HIGH)); // PWM_Motors
+	//scheduler_add_task(new IR_sensor(PRIORITY_HIGH)); // IR Sensors
+	printf("Start tasks \n");
+	scheduler_add_task(new pixy_UART_task(PRIORITY_HIGH));
 
 
 
