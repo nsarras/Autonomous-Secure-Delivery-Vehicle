@@ -1,0 +1,165 @@
+#include <stdio.h>
+#include "generated_can.h"
+#include <assert.h>
+#include <string.h>
+#include <math.h>
+
+
+
+#define assert_float(expected, actual) \
+    assert(fabs(expected - actual) < 0.5)
+
+uint8_t bytes_sent[8];
+bool dbc_app_send_can_msg(uint32_t mid, uint8_t dlc, uint8_t bytes[8])
+{
+    printf("Send MID %u  DLC %u\n", mid, dlc);
+    memcpy(bytes_sent, bytes, 8);
+
+    return true;
+}
+
+void dbc_test1(void)
+{
+    uint8_t bytes[8];
+
+    DBC_TEST1_t to;
+    DBC_TEST1_t from = { 0 };
+    from.DBC_TEST1_enum            = DBC_TEST1_enum_val_one;
+    from.DBC_TEST1_float           = 1.3;
+    from.DBC_TEST1_float_signed    = -123.6;
+    from.DBC_TEST1_unsigned1       = 200;
+    from.DBC_TEST1_unsigned_minmax = 50;
+    dbc_encode_and_send_DBC_TEST1(&from);
+    dbc_encode_DBC_TEST1(bytes, &from);
+    dbc_decode_DBC_TEST1(&to, bytes, NULL);
+    assert(0 == memcmp(bytes, bytes_sent, 8));
+    assert(to.DBC_TEST1_enum             == DBC_TEST1_enum_val_one);
+    assert_float(to.DBC_TEST1_float       , 1.5);
+    assert_float(to.DBC_TEST1_float_signed, -123.6);
+    assert(to.DBC_TEST1_unsigned1        == 200);
+    assert(to.DBC_TEST1_unsigned_minmax  == 50);
+
+
+    from.DBC_TEST1_enum            = DBC_TEST1_enum_val_two;
+    from.DBC_TEST1_float           = 1.6;
+    from.DBC_TEST1_float_signed    = 123.4;
+    from.DBC_TEST1_unsigned1       = 103;
+    from.DBC_TEST1_unsigned_minmax = 123; // Over the max
+    dbc_encode_and_send_DBC_TEST1(&from);
+    dbc_encode_DBC_TEST1(bytes, &from);
+    dbc_decode_DBC_TEST1(&to, bytes, NULL);
+    assert(to.DBC_TEST1_enum             == DBC_TEST1_enum_val_two);
+    assert_float(to.DBC_TEST1_float       , 1.5);
+    assert_float(to.DBC_TEST1_float_signed, 123.6);
+    assert(to.DBC_TEST1_unsigned1        == 103);
+    assert(to.DBC_TEST1_unsigned_minmax  == 100);
+//
+//    printf("%u\n", to.DBC_TEST1_enum           );
+//    printf("%f\n", to.DBC_TEST1_float          );
+//    printf("%f\n", to.DBC_TEST1_float_signed   );
+//    printf("%u\n", to.DBC_TEST1_unsigned1      );
+//    printf("%u\n", to.DBC_TEST1_unsigned_minmax);
+}
+
+void dbc_test2(void)
+{
+    uint8_t bytes[8];
+    DBC_TEST2_t to;
+    DBC_TEST2_t from = { 0 };
+
+    // Zeroes
+    dbc_encode_DBC_TEST2(bytes, &from);
+    dbc_decode_DBC_TEST2(&to, bytes, NULL);
+    assert(0 == to.DBC_TEST2_real_signed1);
+    assert(0 == to.DBC_TEST2_real_signed2);
+    assert(0 == to.DBC_TEST2_signed);
+    assert(0 == to.DBC_TEST2_signed_minmax);
+
+    // Positive
+    from.DBC_TEST2_real_signed1 = 1;
+    from.DBC_TEST2_real_signed2 = 1;
+    from.DBC_TEST2_signed = 1;
+    from.DBC_TEST2_signed_minmax = 1;
+    dbc_encode_DBC_TEST2(bytes, &from);
+    dbc_decode_DBC_TEST2(&to, bytes, NULL);
+    assert(1 == to.DBC_TEST2_real_signed1);
+    assert(1 == to.DBC_TEST2_real_signed2);
+    assert(1 == to.DBC_TEST2_signed);
+    assert(1 == to.DBC_TEST2_signed_minmax);
+
+    // Negative
+    from.DBC_TEST2_real_signed1 = -1;
+    from.DBC_TEST2_real_signed2 = -1;
+    from.DBC_TEST2_signed = -1;
+    from.DBC_TEST2_signed_minmax = -1;
+    dbc_encode_DBC_TEST2(bytes, &from);
+    // Assert on the encoding of DBC_TEST2_real_signed1
+    assert(0x3 == bytes[0] >> 6);
+    assert(0xff == bytes[1]);
+    assert(0x03 == (bytes[2] & 0x03));
+    dbc_decode_DBC_TEST2(&to, bytes, NULL);
+    assert(-1 == to.DBC_TEST2_real_signed1);
+    assert(-1 == to.DBC_TEST2_real_signed2);
+    assert(-1 == to.DBC_TEST2_signed);
+    assert(-1 == to.DBC_TEST2_signed_minmax);
+
+    // Large Negative numbers
+    from.DBC_TEST2_real_signed1 = -2048;
+    from.DBC_TEST2_real_signed2 = -123456;
+    from.DBC_TEST2_signed = -128;
+    from.DBC_TEST2_signed_minmax = -32768;
+    dbc_encode_DBC_TEST2(bytes, &from);
+    dbc_decode_DBC_TEST2(&to, bytes, NULL);
+    assert(-2048 == to.DBC_TEST2_real_signed1);
+    assert(-123456 == to.DBC_TEST2_real_signed2);
+    assert(-128 == to.DBC_TEST2_signed);
+    assert(-32768 == to.DBC_TEST2_signed_minmax);
+
+    // Large Positive numbers
+    from.DBC_TEST2_real_signed1 = 2047;
+    from.DBC_TEST2_real_signed2 = 123456;
+    from.DBC_TEST2_signed = 127;
+    from.DBC_TEST2_signed_minmax = 32767;
+    dbc_encode_DBC_TEST2(bytes, &from);
+    dbc_decode_DBC_TEST2(&to, bytes, NULL);
+    assert(2047 == to.DBC_TEST2_real_signed1);
+    assert(123456 == to.DBC_TEST2_real_signed2);
+    assert(127 == to.DBC_TEST2_signed);
+    assert(32767 == to.DBC_TEST2_signed_minmax);
+}
+
+void dbc_test3(void)
+{
+    uint8_t bytes[8];
+    DBC_TEST3_t to;
+    DBC_TEST3_t from = { 0 };
+
+    // Zeroes
+    dbc_encode_DBC_TEST3(bytes, &from);
+    dbc_decode_DBC_TEST3(&to, bytes, NULL);
+    printf("%i\n", to.DBC_TEST3_real_signed1);
+    printf("%i\n", to.DBC_TEST3_real_signed2);
+    assert(0 == to.DBC_TEST3_real_signed1);
+    assert(0 == to.DBC_TEST3_real_signed2);
+
+    // Negative
+    from.DBC_TEST3_real_signed1 = -1;
+    from.DBC_TEST3_real_signed2 = -2;
+    dbc_encode_DBC_TEST3(bytes, &from);
+    dbc_decode_DBC_TEST3(&to, bytes, NULL);
+    printf("%i\n", to.DBC_TEST3_real_signed1);
+    printf("%i\n", to.DBC_TEST3_real_signed2);
+    assert(-1 == to.DBC_TEST3_real_signed1);
+    assert(-2 == to.DBC_TEST3_real_signed2);
+
+    // Positive
+}
+
+int main_test_dbc()
+{
+    dbc_test1();
+    dbc_test2();
+    dbc_test3();
+
+    return 0;
+}
